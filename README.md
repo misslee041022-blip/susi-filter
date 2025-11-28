@@ -1,6 +1,6 @@
 # ⚡️ 수시 최저 필터 (Susi Passfinder)
 
-### 👉 서비스 바로가기: [https://여기에_아까_나온_주소를_넣으세요]
+### 👉 서비스 바로가기: [https://misslee041022-blip.github.io/susi-filter/]
 
 **"복잡한 모집요강, 클릭 한 번으로 필터링하다"**
 
@@ -25,4 +25,4 @@
 4. 필터링된 결과를 확인하고 관심 있는 학과를 찜(★)합니다.
 
 ---
-*Created for [해커톤이름] Hackathon*
+*Created for [haedal] Hackathon*
