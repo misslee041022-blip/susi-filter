@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>수시 최저 필터</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+    /* 디자인 시스템 */
+    :root { --primary: #007aff; --primary-dark: #0056b3; --bg: #f4f6f9; --star: #ffcc00; --danger: #ff4d4f; --text: #333; }
+    body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; background: var(--bg); margin: 0; padding: 40px 20px; color: var(--text); line-height: 1.5; }
+    .container { max-width: 800px; margin: 0 auto; padding-bottom: 80px; }
+    
+    h1 { text-align: center; color: var(--text); margin: 0 0 8px 0; font-size: 36px; letter-spacing: -1px; font-weight: 800; }
+    .subtitle { text-align: center; color: #666; font-size: 16px; margin-bottom: 40px; font-weight: 500; opacity: 0.8; }
+    
+    .upload-box { background: #fff; padding: 40px; border-radius: 20px; text-align: center; margin-bottom: 24px; border: 2px dashed #dde2e6; transition: 0.3s; box-shadow: 0 10px 30px rgba(0,0,0,0.02); }
+    .upload-box.ready { border-color: var(--primary); background: #f0f7ff; }
+    .upload-box:hover { border-color: #adb5bd; transform: translateY(-2px); }
+    
+    .input-box { background: white; padding: 30px; border-radius: 20px; margin-bottom: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); opacity: 0.6; pointer-events: none; transition: 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); filter: grayscale(100%); }
+    .input-box.active { opacity: 1; pointer-events: auto; filter: grayscale(0%); transform: translateY(0); }
+
+    .row { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+    .row label { width: 50px; font-weight: 700; font-size: 16px; color: #495057; }
+    input, select { flex: 1; padding: 14px; border: 1px solid #dee2e6; border-radius: 12px; font-size: 16px; transition: 0.2s; outline: none; }
+    input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,122,255,0.1); }
+    
+    .btn-search { width: 100%; padding: 16px; background: var(--primary); color: white; border: none; border-radius: 14px; font-size: 18px; font-weight: 700; cursor: pointer; margin-top: 10px; transition: 0.2s; box-shadow: 0 4px 12px rgba(0,122,255,0.3); }
+    .btn-search:disabled { background: #ced4da; cursor: not-allowed; box-shadow: none; }
+    .btn-search:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,122,255,0.4); }
+
+    .filter-bar { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; }
+    .filter-btn { padding: 8px 18px; border: 1px solid #e9ecef; border-radius: 50px; background: white; cursor: pointer; font-weight: 600; color: #495057; white-space: nowrap; transition: 0.2s; font-size: 14px; }
+    .filter-btn.active { background: #343a40; color: white; border-color: #343a40; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+    .filter-btn:hover:not(.active) { background: #f8f9fa; transform: translateY(-1px); }
+
+    .card { background: white; padding: 24px; border-radius: 16px; margin-bottom: 16px; border-left: 6px solid #dee2e6; cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.03); position: relative; transition: all 0.3s ease; }
+    .card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px rgba(0,0,0,0.08); }
+    
+    .card.dimmed { opacity: 0.6; background-color: #f9f9f9; border-left-color: #ced4da !important; filter: grayscale(50%); }
+    .card.dimmed:hover { transform: none; box-shadow: none; }
+    .card.dimmed .badge.bg-green { display: none; } 
+    .fail-msg { color: var(--danger); font-weight: 800; font-size: 13px; display: none; background: #fff5f5; padding: 4px 8px; border-radius: 6px; }
+    .card.dimmed .fail-msg { display: inline-block; margin-left: 5px; }
+
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .star-btn { font-size: 26px; color: #dee2e6; cursor: pointer; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); line-height: 1; }
+    .star-btn:hover { transform: scale(1.3); }
+    .star-btn.active { color: var(--star); text-shadow: 0 2px 10px rgba(255, 204, 0, 0.4); }
+
+    .badge { display: inline-block; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; margin-right: 6px; }
+    .bg-green { background: #e6fcf5; color: #0ca678; }
+    .bg-red { background: #fff5f5; color: #fa5252; }
+    .bg-gray { background: #f1f3f5; color: #495057; }
+
+    .detail { display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #f1f3f5; font-size: 14px; color: #495057; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    .link-btn { display: block; text-align: center; margin-top: 12px; padding: 14px; background: #f8f9fa; color: var(--primary); text-decoration: none; border-radius: 10px; font-weight: 700; transition: 0.2s; }
+    .link-btn:hover { background: #e7f5ff; }
+    
+    .filter-group { display: flex; align-items: center; margin-bottom: 12px; }
+    .filter-group .filter-bar { flex: 1; margin-bottom: 0; }
+    .filter-group span { min-width: 40px; font-size: 14px; }
+
+    .bookmark-toggle-area { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 16px; }
+    .btn-bookmark-mode { background: white; border: 1px solid #ced4da; padding: 8px 16px; border-radius: 50px; font-weight: 600; color: #495057; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; font-size: 13px; }
+    .btn-bookmark-mode:hover { background: #f8f9fa; border-color: #adb5bd; }
+    .btn-bookmark-mode.active { border-color: var(--star); background: #fff9db; color: #f08c00; }
+    .btn-reset-bookmark { background: white; border: 1px solid #ffc9c9; padding: 8px 16px; border-radius: 50px; font-weight: 600; color: var(--danger); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; font-size: 13px; }
+    .btn-reset-bookmark:hover { background: #fff5f5; border-color: var(--danger); }
+
+    /* 샘플 버튼: 눈에 띄지만 메인은 아니게 */
+    .sample-btn { display: block; margin: 15px auto 0; background: transparent; border: 1px solid #dee2e6; color: #868e96; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 13px; transition: 0.2s; }
+    .sample-btn:hover { color: var(--primary); border-color: var(--primary); background: #f0f7ff; }
+
+    #toast-container { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 9999; }
+    .toast { background: rgba(33, 37, 41, 0.95); color: white; padding: 12px 24px; border-radius: 50px; font-size: 14px; font-weight: 600; margin-top: 10px; opacity: 0; transition: opacity 0.3s, transform 0.3s; transform: translateY(20px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); text-align: center; white-space: nowrap; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h1>⚡️ 수시 최저 필터</h1>
+    <p class="subtitle">복잡한 모집요강, 클릭 한 번으로 필터링</p> 
+    
+    <div class="upload-box" id="drop-zone">
+        <h3 style="margin-top:0;">📂 1단계: 엑셀 파일 열기</h3>
+        <p style="color:#868e96; font-size:14px; margin-bottom: 20px;">학교/학과별 최저학력기준이 담긴 <b>.xlsx</b> 파일을 선택해주세요.</p>
+        <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:block; margin:0 auto;">
+        <button class="sample-btn" onclick="loadSampleData()">🧪 엑셀 파일이 없으신가요? <b>샘플 데이터로 체험하기</b></button>
+        <div id="file-status" style="color:#007aff; font-weight:bold; margin-top:15px; min-height:24px; font-size:15px;"></div>
+    </div>
+
+    <div class="input-box" id="input-area">
+        <h3 style="margin-top:0; margin-bottom:20px;">📝 2단계: 내 성적 입력</h3>
+        <div class="row"><label>국어</label><input type="number" id="kor" placeholder="등급" min="1" max="9"></div>
+        <div class="row"><label>수학</label>
+            <select id="mathType"><option value="미적_기하">미적/기하</option><option value="확통">확통</option></select>
+            <input type="number" id="math" placeholder="등급" min="1" max="9">
+        </div>
+        <div class="row"><label>영어</label><input type="number" id="eng" placeholder="등급" min="1" max="9"></div>
+        <div class="row"><label>탐구1</label>
+            <select id="tam1Type"><option value="과탐">과탐</option><option value="사탐">사탐</option></select>
+            <input type="number" id="tam1" placeholder="등급" min="1" max="9">
+        </div>
+        <div class="row"><label>탐구2</label>
+            <select id="tam2Type"><option value="과탐">과탐</option><option value="사탐">사탐</option></select>
+            <input type="number" id="tam2" placeholder="등급" min="1" max="9">
+        </div>
+        <div class="row"><label>한국사</label><input type="number" id="his" placeholder="등급" min="1" max="9"></div>
+        <button class="btn-search" onclick="runFilter()">분석 시작 🚀</button>
+    </div>
+
+    <div id="result-area" style="display:none;">
+    <div style="margin-bottom:20px; display:flex; flex-direction:column; gap:8px;">
+        
+        <div class="bookmark-toggle-area">
+            <button class="btn-bookmark-mode" id="btn-bookmark-mode" onclick="toggleBookmarkMode()">
+                <span>⭐</span> 찜한 학과만 모아보기
+            </button>
+            <button class="btn-reset-bookmark" onclick="resetBookmarks()">
+                <span>🗑️</span> 찜 초기화
+            </button>
+        </div>
+
+        <div class="filter-group">
+            <span style="font-weight:bold; color:#333;">최저</span>
+            <div class="filter-bar" id="limit-filter">
+                <button class="filter-btn active" data-filter-type="limit" data-filter-value="all" onclick="multiFilter(this)">전체</button>
+                <button class="filter-btn" data-filter-type="limit" data-filter-value="yes" onclick="multiFilter(this)">최저 있음</button>
+                <button class="filter-btn" data-filter-type="limit" data-filter-value="no" onclick="multiFilter(this)">최저 없음</button>
+            </div>
+        </div>
+        
+        <div class="filter-group">
+            <span style="font-weight:bold; color:#333;">계열</span>
+            <div class="filter-bar" id="category-filter">
+                <button class="filter-btn active" data-filter-type="category" data-filter-value="all" onclick="multiFilter(this)">전체</button>
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <span style="font-weight:bold; color:#333;">학교</span>
+            <div class="filter-bar" id="univ-filter">
+                <button class="filter-btn active" data-filter-type="univ" data-filter-value="all" onclick="multiFilter(this)">전체</button>
+            </div>
+        </div>
+        
+        <div class="filter-group">
+            <span style="font-weight:bold; color:#333;">전형</span>
+            <div class="filter-bar" id="type-filter">
+                <button class="filter-btn active" data-filter-type="type" data-filter-value="all" onclick="multiFilter(this)">전체</button>
+            </div>
+        </div>
+        
+        <span id="count-text" style="font-weight:800; color:#495057; text-align:right; font-size: 15px; margin-top: 5px;"></span>
+    </div>
+    <div id="list"></div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+    let db = []; 
+    let filteredDb = []; 
+    let bookmarks = new Set(); 
+    let isBookmarkMode = false; 
+    let lastUserScore = null; 
+    
+    let currentFilters = { 
+        univ: 'all', 
+        category: 'all', 
+        type: 'all', 
+        limit: 'all' 
+    };
+
+    // 대학 상징색
+    const UNIV_COLORS = {
+        "서울대": "#0F0F70", "연세대": "#00287A", "고려대": "#860018",
+        "서강대": "#B0232A", "성균관대": "#003E33", "한양대": "#0E4194",
+        "중앙대": "#183E93", "경희대": "#9D2235", "서울시립대": "#16469E",
+        "건국대": "#00452E", "경북대": "#DD2417", "부산대": "#00578E"
+    };
+
+    const RANKED_UNIVS = [
+        "서울대", "연세대", "고려대", "서강대", "성균관대", "한양대", 
+        "중앙대", "경희대", "서울시립대", "건국대", "경북대", "부산대"
+    ];
+
+    const RANKED_TYPES = ["교과", "종합", "논술", "기타"];
+    const TYPE_DISPLAY_NAMES = { "교과": "학생부 교과", "종합": "학생부 종합", "논술": "논술", "기타": "기타" };
+
+    try {
+        const saved = localStorage.getItem('sky_bookmarks');
+        if(saved) bookmarks = new Set(JSON.parse(saved));
+    } catch(e) {}
+
+    function showToast(message) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerText = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.classList.add('show'), 10);
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // ★ 시연용 샘플 데이터 로드 ★
+    function loadSampleData() {
+        const sample = [
+            {대학명:"서울대", 계열:"인문", 모집단위:"경영대학", 전형명:"지역균형", 전형분류:"교과", 등급합:9, 반영영역수:3, 탐구반영수:2, 한국사:4, 수학선택:"", 탐구선택:"", 영어필수여부:"", URL:"https://admission.snu.ac.kr", '50컷':"1.1", '70컷':"1.2"},
+            {대학명:"서울대", 계열:"자연", 모집단위:"의예과", 전형명:"일반전형", 전형분류:"종합", 등급합:0, 반영영역수:0, 탐구반영수:2, 한국사:4, 수학선택:"미적", 탐구선택:"과탐", 영어필수여부:"", URL:"", '50컷':"1.0", '70컷':"1.1"},
+            {대학명:"연세대", 계열:"인문", 모집단위:"경제학부", 전형명:"활동우수형", 전형분류:"종합", 등급합:4, 반영영역수:2, 탐구반영수:1, 한국사:4, 수학선택:"", 탐구선택:"", 영어필수여부:"3등급", URL:"", '50컷':"1.4", '70컷':"1.6"},
+            {대학명:"고려대", 계열:"자연", 모집단위:"컴퓨터학과", 전형명:"학교추천", 전형분류:"교과", 등급합:7, 반영영역수:3, 탐구반영수:2, 한국사:4, 수학선택:"미적", 탐구선택:"과탐", 영어필수여부:"", URL:"", '50컷':"1.3", '70컷':"1.5"},
+            {대학명:"한양대", 계열:"자연", 모집단위:"기계공학부", 전형명:"논술전형", 전형분류:"논술", 등급합:0, 반영영역수:0, 탐구반영수:0, 한국사:0, 수학선택:"", 탐구선택:"", 영어필수여부:"", URL:"", '50컷':"-", '70컷':"-"},
+            {대학명:"중앙대", 계열:"인문", 모집단위:"경영학부", 전형명:"논술전형", 전형분류:"논술", 등급합:6, 반영영역수:3, 탐구반영수:1, 한국사:4, 수학선택:"", 탐구선택:"", 영어필수여부:"", URL:"", '50컷':"-", '70컷':"-"},
+            {대학명:"성균관대", 계열:"자연", 모집단위:"전자전기공학부", 전형명:"논술우수", 전형분류:"논술", 등급합:5, 반영영역수:3, 탐구반영수:2, 한국사:4, 수학선택:"미적", 탐구선택:"과탐", 영어필수여부:"2등급", URL:"", '50컷':"-", '70컷':"-"},
+            {대학명:"경희대", 계열:"인문", 모집단위:"호텔경영학과", 전형명:"네오르네상스", 전형분류:"종합", 등급합:0, 반영영역수:0, 탐구반영수:0, 한국사:0, 수학선택:"", 탐구선택:"", 영어필수여부:"", URL:"", '50컷':"2.1", '70컷':"2.4"},
+            {대학명:"건국대", 계열:"자연", 모집단위:"수의예과", 전형명:"KU논술", 전형분류:"논술", 등급합:4, 반영영역수:3, 탐구반영수:1, 한국사:5, 수학선택:"미적", 탐구선택:"과탐", 영어필수여부:"", URL:"", '50컷':"-", '70컷':"-"},
+            {대학명:"부산대", 계열:"자연", 모집단위:"기계공학부", 전형명:"학생부교과", 전형분류:"교과", 등급합:6, 반영영역수:2, 탐구반영수:1, 한국사:4, 수학선택:"미적", 탐구선택:"과탐", 영어필수여부:"", URL:"", '50컷':"1.9", '70컷':"2.1"}
+        ];
+        
+        db = sample;
+        document.getElementById('file-status').innerHTML = `✅ <span style="color:#007aff">샘플 데이터(10개)가 로드되었습니다!</span>`;
+        document.querySelector('.upload-box').classList.add('ready');
+        document.getElementById('input-area').classList.add('active');
+        document.getElementById('input-area').scrollIntoView({behavior: 'smooth'});
+        showToast("🧪 샘플 데이터로 체험 모드가 시작됩니다!");
+    }
+
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const rawData = XLSX.utils.sheet_to_json(worksheet);
+            
+            db = rawData.map(item => {
+                const newItem = {};
+                for(let key in item) {
+                    let cleanKey = key.trim().replace(/[\ufeff\s]/g, ''); 
+                    newItem[cleanKey] = item[key];
+                }
+                return newItem;
+            });
+
+            if(db.length > 0) {
+                document.getElementById('file-status').innerText = `✅ ${db.length}개 학과 데이터 로드 성공!`;
+                document.getElementById('file-status').style.color = "#007aff";
+                document.querySelector('.upload-box').classList.add('ready');
+                document.getElementById('input-area').classList.add('active'); 
+                showToast("엑셀 파일이 성공적으로 로드되었습니다.");
+            } else {
+                showToast("⚠️ 데이터가 없는 파일입니다.");
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    function fixUrl(url, univName) {
+        if (!url || url.length < 5) return "#";
+        let fixed = url.trim();
+        if (univName === '고려대' && fixed.startsWith("http:")) {
+            fixed = fixed.replace("http:", "https:");
+        }
+        return fixed;
+    }
+
+    function checkGradePass(item, u) {
+        if(parseInt(item['한국사']) > 0 && u.his > parseInt(item['한국사'])) return false;
+        if((item['수학선택']||'').includes('미적') && u.mathType !== '미적_기하') return false;
+        if((item['탐구선택']||'').includes('과탐')) {
+            if(u.tam1Type !== '과탐' || u.tam2Type !== '과탐') return false;
+        }
+
+        let curEng = u.eng;
+        if(String(item['영어필수여부']).includes('등급')) {
+            let limit = parseInt(item['영어필수여부'].replace(/[^0-9]/g,''));
+            if(u.eng > limit) return false;
+            if(item['대학명'] === '연세대') curEng = 99; 
+        }
+        
+        const limitSum = parseInt(item['등급합'] || 0);
+        const limitCount = parseInt(item['반영영역수'] || 0);
+
+        if(limitSum > 0) {
+            let tam = (parseInt(item['탐구반영수']) == 2) ? Math.floor((u.tam1+u.tam2)/2) : Math.min(u.tam1, u.tam2);
+            let subs = [u.kor, u.math, tam];
+            if(curEng !== 99) subs.push(curEng);
+            subs.sort((a,b)=>a-b);
+            let sum = 0;
+            for(let i=0; i<limitCount; i++) sum += subs[i];
+            if(sum > limitSum) return false;
+        }
+        return true;
+    }
+
+    function runFilter() {
+        const rawInputs = {
+            kor: document.getElementById('kor').value,
+            math: document.getElementById('math').value,
+            eng: document.getElementById('eng').value,
+            tam1: document.getElementById('tam1').value,
+            tam2: document.getElementById('tam2').value,
+            his: document.getElementById('his').value
+        };
+
+        if(!rawInputs.kor || !rawInputs.math || !rawInputs.eng || !rawInputs.tam1 || !rawInputs.tam2 || !rawInputs.his) { 
+            showToast("⚠️ 모든 등급을 입력해주세요!"); 
+            return; 
+        }
+
+        const u = {
+            kor: Number(rawInputs.kor),
+            math: Number(rawInputs.math),
+            eng: Number(rawInputs.eng),
+            tam1: Number(rawInputs.tam1),
+            tam2: Number(rawInputs.tam2),
+            his: Number(rawInputs.his),
+            mathType: document.getElementById('mathType').value,
+            tam1Type: document.getElementById('tam1Type').value,
+            tam2Type: document.getElementById('tam2Type').value
+        };
+
+        const allGrades = [u.kor, u.math, u.eng, u.tam1, u.tam2, u.his];
+        if (!allGrades.every(grade => grade >= 1 && grade <= 9)) {
+            showToast("🚫 등급은 1~9 사이의 숫자만 가능합니다.");
+            return;
+        }
+
+        lastUserScore = u; 
+        filteredDb = []; 
+        const uniqueUnivs = new Set();
+        const uniqueCategories = new Set();
+        const uniqueTypes = new Set(); 
+        
+        db.forEach(item => {
+            if(checkGradePass(item, u)) {
+                filteredDb.push(item);
+                if(item['대학명']) uniqueUnivs.add(item['대학명']);
+                if(item['계열']) uniqueCategories.add(item['계열']);
+                if(item['전형분류']) uniqueTypes.add(item['전형분류']); 
+            }
+        });
+
+        createUnivFilterButtons(Array.from(uniqueUnivs)); 
+        createFilterButtons('category-filter', Array.from(uniqueCategories), 'category'); 
+        createTypeFilterButtons(Array.from(uniqueTypes)); 
+        
+        document.getElementById('result-area').style.display = 'block';
+        
+        currentFilters = { univ: 'all', category: 'all', type: 'all', limit: 'all' };
+        isBookmarkMode = false; 
+        document.getElementById('btn-bookmark-mode').classList.remove('active');
+        document.getElementById('btn-bookmark-mode').innerHTML = `<span>⭐</span> 찜한 학과만 모아보기`;
+        
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('#univ-filter [data-filter-value="all"]').classList.add('active');
+        document.querySelector('#category-filter [data-filter-value="all"]').classList.add('active');
+        document.querySelector('#type-filter [data-filter-value="all"]').classList.add('active');
+        document.querySelector('#limit-filter [data-filter-value="all"]').classList.add('active');
+
+        updateFilterButtonsState();
+        renderList(filteredDb);
+        document.getElementById('count-text').innerText = `🎉 ${filteredDb.length}개의 학과 발견!`;
+        
+        setTimeout(() => document.getElementById('result-area').scrollIntoView({behavior: 'smooth'}), 100);
+    }
+
+    function createUnivFilterButtons(values) {
+        const bar = document.getElementById('univ-filter');
+        Array.from(bar.children).forEach(child => {
+            if (child.getAttribute('data-filter-value') !== 'all') bar.removeChild(child);
+        });
+        
+        values.sort((a, b) => {
+            const indexA = RANKED_UNIVS.indexOf(a);
+            const indexB = RANKED_UNIVS.indexOf(b);
+            if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+        });
+
+        values.forEach(value => {
+            let btn = document.createElement('button');
+            btn.className = 'filter-btn';
+            btn.textContent = value;
+            btn.dataset.filterType = 'univ';
+            btn.dataset.filterValue = value;
+            btn.onclick = function() { multiFilter(this); };
+            bar.appendChild(btn);
+        });
+    }
+
+    function createFilterButtons(parentId, values, filterType) {
+        const bar = document.getElementById(parentId);
+        Array.from(bar.children).forEach(child => {
+            if (child.getAttribute('data-filter-value') !== 'all') bar.removeChild(child);
+        });
+        values.sort().forEach(value => {
+            let btn = document.createElement('button');
+            btn.className = 'filter-btn';
+            btn.textContent = value;
+            btn.dataset.filterType = filterType;
+            btn.dataset.filterValue = value;
+            btn.onclick = function() { multiFilter(this); };
+            bar.appendChild(btn);
+        });
+    }
+
+    function createTypeFilterButtons(values) {
+        const bar = document.getElementById('type-filter');
+        Array.from(bar.children).forEach(child => {
+            if (child.getAttribute('data-filter-value') !== 'all') bar.removeChild(child);
+        });
+
+        values.sort((a, b) => {
+            const indexA = RANKED_TYPES.indexOf(a);
+            const indexB = RANKED_TYPES.indexOf(b);
+            if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+        });
+
+        values.forEach(value => {
+            let btn = document.createElement('button');
+            btn.className = 'filter-btn';
+            btn.textContent = TYPE_DISPLAY_NAMES[value] || value;
+            btn.dataset.filterType = 'type';
+            btn.dataset.filterValue = value; 
+            btn.onclick = function() { multiFilter(this); };
+            bar.appendChild(btn);
+        });
+    }
+
+    function toggleBookmarkMode() {
+        isBookmarkMode = !isBookmarkMode;
+        const btn = document.getElementById('btn-bookmark-mode');
+        
+        if(isBookmarkMode) {
+            btn.classList.add('active');
+            btn.innerHTML = `<span>⭐</span> 전체 보기`;
+            showToast("⭐ 찜한 학과만 모아봅니다.");
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = `<span>⭐</span> 찜한 학과만 모아보기`;
+            showToast("📂 전체 목록으로 돌아왔습니다.");
+        }
+        applyFiltersAndRender(); 
+    }
+
+    function toggleBookmark(key) {
+        if(bookmarks.has(key)) {
+            bookmarks.delete(key);
+        } else {
+            bookmarks.add(key);
+            showToast("⭐ 찜 목록에 추가되었습니다!");
+        }
+        localStorage.setItem('sky_bookmarks', JSON.stringify(Array.from(bookmarks)));
+        applyFiltersAndRender();
+    }
+
+    function resetBookmarks() {
+        if(bookmarks.size === 0) {
+            showToast("삭제할 찜 목록이 없습니다.");
+            return;
+        }
+        if(confirm("정말 모든 찜 목록을 삭제하시겠습니까?")) {
+            bookmarks.clear();
+            localStorage.removeItem('sky_bookmarks');
+            applyFiltersAndRender();
+            showToast("🗑️ 찜 목록이 초기화되었습니다.");
+        }
+    }
+
+    function updateFilterButtonsState() {
+        if (isBookmarkMode) return; 
+
+        const filterTypes = ['univ', 'category', 'type', 'limit'];
+        filterTypes.forEach(targetType => {
+            const container = document.getElementById(`${targetType}-filter`);
+            if (!container) return;
+            const buttons = container.querySelectorAll('.filter-btn');
+
+            const validData = filteredDb.filter(item => {
+                let match = true;
+                if (targetType !== 'univ' && currentFilters.univ !== 'all' && item['대학명'] !== currentFilters.univ) match = false;
+                if (targetType !== 'category' && currentFilters.category !== 'all' && item['계열'] !== currentFilters.category) match = false;
+                if (targetType !== 'type' && currentFilters.type !== 'all' && item['전형분류'] !== currentFilters.type) match = false;
+                if (targetType !== 'limit') {
+                    if (currentFilters.limit === 'yes' && (parseInt(item['등급합'] || 0) === 0)) match = false;
+                    if (currentFilters.limit === 'no' && (parseInt(item['등급합'] || 0) > 0)) match = false;
+                }
+                return match;
+            });
+
+            const availableValues = new Set();
+            validData.forEach(item => {
+                if (targetType === 'univ') availableValues.add(item['대학명']);
+                else if (targetType === 'category') availableValues.add(item['계열']);
+                else if (targetType === 'type') availableValues.add(item['전형분류']); 
+                else if (targetType === 'limit') {
+                    const hasLimit = parseInt(item['등급합'] || 0) > 0;
+                    availableValues.add(hasLimit ? 'yes' : 'no');
+                }
+            });
+
+            buttons.forEach(btn => {
+                const val = btn.dataset.filterValue;
+                if (val === 'all') return;
+                if (availableValues.has(val)) btn.style.display = 'inline-block';
+                else btn.style.display = 'none';
+            });
+        });
+    }
+
+    function multiFilter(btn) {
+        const filterType = btn.dataset.filterType;
+        const filterValue = btn.dataset.filterValue;
+
+        document.querySelectorAll(`[data-filter-type="${filterType}"]`).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        currentFilters[filterType] = filterValue;
+        updateFilterButtonsState();
+        applyFiltersAndRender();
+    }
+
+    function applyFiltersAndRender() {
+        let finalResult = [];
+
+        if (isBookmarkMode) {
+            db.forEach(item => {
+                const uniqueKey = `${item['대학명']}_${item['모집단위']}_${item['전형명']}`;
+                if (bookmarks.has(uniqueKey)) {
+                    const passed = lastUserScore ? checkGradePass(item, lastUserScore) : true;
+                    const displayItem = { ...item, _isFailed: !passed };
+                    finalResult.push(displayItem);
+                }
+            });
+        } else {
+            finalResult = filteredDb.filter(item => {
+                const univMatch = currentFilters.univ === 'all' || item['대학명'] === currentFilters.univ;
+                const categoryMatch = currentFilters.category === 'all' || item['계열'] === currentFilters.category;
+                const typeMatch = currentFilters.type === 'all' || item['전형분류'] === currentFilters.type;
+                
+                let limitMatch = true;
+                if (currentFilters.limit === 'yes') limitMatch = parseInt(item['등급합'] || 0) > 0;
+                else if (currentFilters.limit === 'no') limitMatch = parseInt(item['등급합'] || 0) === 0;
+                
+                return univMatch && categoryMatch && typeMatch && limitMatch;
+            });
+        }
+
+        renderList(finalResult);
+        const countMsg = isBookmarkMode ? `⭐ 찜한 학과 ${finalResult.length}개` : `🎉 ${finalResult.length}개의 학과 발견!`;
+        document.getElementById('count-text').innerText = countMsg;
+    }
+
+    function renderList(data) {
+        const list = document.getElementById('list');
+        list.innerHTML = '';
+        
+        data.forEach(item => {
+            const univ = item['대학명'] || '';
+            const dept = item['모집단위'] || '';
+            const typeName = item['전형명'] || ''; 
+            
+            const limitSum = parseInt(item['등급합'] || 0);
+            const limitCount = parseInt(item['반영영역수'] || 0);
+            const url = item['URL'];
+            
+            let finalLink = fixUrl(url, univ);
+            let borderColor = UNIV_COLORS[univ] || '#dee2e6';
+
+            const uniqueKey = `${univ}_${dept}_${typeName}`;
+            const isBookmarked = bookmarks.has(uniqueKey);
+            const isFailed = item._isFailed || false; 
+
+            let d = document.createElement('div');
+            d.className = `card item ${isFailed ? 'dimmed' : ''}`;
+            d.dataset.univ = univ;
+            d.style.borderLeftColor = borderColor;
+            
+            d.innerHTML = `
+                <div class="card-header">
+                    <div>
+                        <div style="font-size:13px; color:#868e96; margin-bottom:4px;">${univ} · ${item['계열']}</div>
+                        <div style="font-size:19px; font-weight:800; color:#212529;">${dept}</div>
+                    </div>
+                    <span class="star-btn ${isBookmarked ? 'active' : ''}" onclick="event.stopPropagation(); toggleBookmark('${uniqueKey}')">
+                        ${isBookmarked ? '★' : '☆'}
+                    </span>
+                </div>
+                <div style="margin-top:12px;">
+                    <span class="badge bg-gray">${typeName}</span>
+                    ${limitSum > 0 ? `<span class="badge bg-red">최저 ${limitCount}합 ${limitSum}</span>` : ''}
+                    <span class="fail-msg">⚠️ 기준 미달</span>
+                </div>
+                <div class="detail">
+                    <p style="margin: 0;">작년 50%컷: <b>${item['50컷'] || '-'}</b> / 70%컷: <b>${item['70컷'] || '-'}</b></p>
+                    <a href="${finalLink}" target="_blank" class="link-btn">학과 홈페이지 바로가기 ></a>
+                </div>
+            `;
+            d.onclick = function(e) {
+                if(e.target.tagName !== 'A' && !e.target.classList.contains('star-btn')) {
+                    let det = this.querySelector('.detail');
+                    const isHidden = getComputedStyle(det).display === 'none';
+                    det.style.display = isHidden ? 'block' : 'none';
+                }
+            };
+            list.appendChild(d);
+        });
+    }
+</script>
+</body>
+</html>
