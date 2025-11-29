@@ -1,4 +1,4 @@
-# ⚡️ 수시 최저 필터.노트북 ver (Susi Passfinder) 
+# ⚡️ 수시 최저 필터 (Susi Passfinder) 
 
 ### 👉 서비스 바로가기: [https://misslee041022-blip.github.io/susi-filter/]
 
